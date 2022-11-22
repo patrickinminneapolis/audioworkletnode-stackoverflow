@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+
+    <script type="text/javascript">
+      async function test(mp3link) {
+        audio = new Audio(mp3link);
+        audio.setAttribute("controls", "true");
+        audio.crossOrigin = "anonymous";
+        document.getElementById("divid").appendChild(audio);
+
+        const audioContext = new AudioContext();
+        const audioMediaElement = audioContext.createMediaElementSource(audio);
+        await audioContext.audioWorklet.addModule("testprocessor.js");
+        const recorder = new AudioWorkletNode(audioContext, "testprocessor");
+
+        setInterval(() => recorder.port.postMessage("still alive ?"), 300);
+
+        const convertFloatToAudioBuffer = (data) => {
+          const sampleRate = 8000 | audioContext.sampleRate;
+          const channels = 1;
+          const sampleLength = 128 | data.length; // 1sec = sampleRate * 1
+          const audioBuffer = audioContext.createBuffer(
+            channels,
+            sampleLength,
+            sampleRate
+          ); // Empty Audio
+          audioBuffer.copyToChannel(new Float32Array(data), 0); // depending on your processing this could be already a float32array
+          return audioBuffer;
+        };
+        let startAt = 0;
+        const streamDestination = audioContext.createMediaStreamDestination();
+
+        const play = (data) => {
+          const audioBufferSourceNode = audioContext.createBufferSource();
+          audioBufferSourceNode.buffer = convertFloatToAudioBuffer(data);
+          audioBufferSourceNode.connect(streamDestination);
+          audioBufferSourceNode.start();
+        };
+
+        recorder.port.onmessage = (ev) => play(ev.data);
+        audioMediaElement.connect(recorder); // connect the processor with the source
+        audioMediaElement.connect(audioContext.destination); // so speakers still work
+        //getAudioFocus();
+        console.log("v3");
+        audio.play();
+      }
+    </script>
+  </head>
+  <body>
+    <div id="divid">
+      <div>
+        <button onclick="test('smalltalk.mp3')">
+          local hosted mp3 -- testprocessor:process() will not fire
+        </button>
+      </div>
+      <div>
+        <button onclick="test('https\:\/\/am820.wnyc.org/wnycam-web')">
+          streaming mp3 -- testprocessor:process() will not fire
+        </button>
+      </div>
+    </div>
+  </body>
+</html>
